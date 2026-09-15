@@ -1,56 +1,31 @@
-name: Build & Release Android APK
+name: Build Android Release
 
 on:
   push:
-    branches: [ "main", "master" ]
-  pull_request:
-    branches: [ "main", "master" ]
-  workflow_dispatch:
+    branches: [ main ] # Ya aapki jo bhi default branch ho (jaise master)
 
 jobs:
   build:
-    name: Build Android APK
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v3
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
+    - name: Set up JDK 17
+      uses: actions/setup-java@v3
+      with:
+        distribution: 'temurin'
+        java-version: '17'
 
-      - name: Restore Debug Keystore
-        run: |
-          if [ -f "debug.keystore.base64" ]; then
-            base64 -d debug.keystore.base64 > debug.keystore
-            echo "Debug keystore restored from base64."
-          else
-            keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-            echo "Generated new debug keystore."
-          fi
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '9.3.1'
+    - name: Build App Bundle (AAB)
+      run: ./gradlew bundleRelease
 
-      - name: Build Debug APK
-        run: gradle assembleDebug --stacktrace
-
-      - name: Rename & Prepare APK
-        run: |
-          mkdir -p output_apk
-          cp app/build/outputs/apk/debug/*.apk output_apk/ON-Study-Pakistan.apk || true
-
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ON-Study-Pakistan-APK
-          path: |
-            output_apk/*.apk
-            app/build/outputs/apk/debug/*.apk
-          retention-days: 30
-
+    - name: Upload AAB Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: release-bundle
+        path: app/build/outputs/bundle/release/app-release.aab
