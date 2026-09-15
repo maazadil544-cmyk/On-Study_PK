@@ -1,31 +1,51 @@
-name: Build Android Release
+name: Build Android Release (AAB)
 
 on:
   push:
-    branches: [ main ] # Ya aapki jo bhi default branch ho (jaise master)
+    branches: [ "main", "master" ]
+  workflow_dispatch:
 
 jobs:
   build:
+    name: Generate Android App Bundle (AAB)
     runs-on: ubuntu-latest
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Set up JDK 17
-      uses: actions/setup-java@v3
+      uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
         java-version: '17'
+
+    - name: Prepare environment file
+      run: |
+        if [ ! -f .env ] && [ -f .env.example ]; then
+          cp .env.example .env
+        fi
+
+    - name: Prepare Keystore for Signing
+      run: |
+        if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > my-upload-key.jks
+          echo "KEYSTORE_PATH=my-upload-key.jks" >> $GITHUB_ENV
+          echo "Using keystore from GitHub Secrets."
+        else
+          keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          echo "Generated fallback keystore for signing."
+        fi
 
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
     - name: Build App Bundle (AAB)
-      run: ./gradlew bundleRelease
+      run: ./gradlew bundleRelease --stacktrace
 
     - name: Upload AAB Artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
-        name: release-bundle
-        path: app/build/outputs/bundle/release/app-release.aab
+        name: app-release-bundle
+        path: app/build/outputs/bundle/release/*.aab
+        retention-days: 30
