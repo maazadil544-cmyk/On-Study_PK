@@ -135,6 +135,7 @@ fun BookmarksScreen(viewModel: StudyViewModel) {
                                     title = matchedBook.title,
                                     subject = matchedBook.subject,
                                     bookType = BookType.fromString(matchedBook.bookType),
+                                    fileLink = matchedBook.fileLink,
                                     modifier = Modifier
                                         .width(42.dp)
                                         .height(58.dp),

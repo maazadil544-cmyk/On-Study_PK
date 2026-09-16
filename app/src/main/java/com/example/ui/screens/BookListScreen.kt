@@ -355,6 +355,7 @@ fun BookCardItem(
                     title = book.title,
                     subject = book.subject,
                     bookType = bookType,
+                    fileLink = book.fileLink,
                     modifier = Modifier
                         .width(62.dp)
                         .height(84.dp),
@@ -619,6 +620,7 @@ fun BookDetailsDialog(
                         title = book.title,
                         subject = book.subject,
                         bookType = BookType.fromString(book.bookType),
+                        fileLink = book.fileLink,
                         modifier = Modifier
                             .width(100.dp)
                             .height(140.dp),

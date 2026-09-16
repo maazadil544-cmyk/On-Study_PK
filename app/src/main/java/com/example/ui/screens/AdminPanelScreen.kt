@@ -609,6 +609,7 @@ fun AdminBooksListTab(
                             title = book.title,
                             subject = book.subject,
                             bookType = BookType.fromString(book.bookType),
+                            fileLink = book.fileLink,
                             modifier = Modifier
                                 .width(42.dp)
                                 .height(58.dp),
@@ -1014,6 +1015,7 @@ fun AdminAddBookTab(
                             title = title.ifBlank { "Sample Book" },
                             subject = subject,
                             bookType = BookType.fromString(bookType),
+                            fileLink = fileLink,
                             modifier = Modifier
                                 .width(64.dp)
                                 .height(88.dp),
@@ -1258,6 +1260,7 @@ fun AdminEditBookDialog(
                         title = title,
                         subject = subject,
                         bookType = BookType.fromString(book.bookType),
+                        fileLink = fileLink,
                         modifier = Modifier
                             .width(52.dp)
                             .height(72.dp),

@@ -356,6 +356,7 @@ fun GeneralBookCard(
                     title = book.title,
                     subject = book.subject,
                     bookType = BookType.fromString(book.bookType),
+                    fileLink = book.fileLink,
                     modifier = Modifier
                         .width(58.dp)
                         .height(80.dp),
@@ -574,6 +575,7 @@ fun GeneralBookDetailDialog(
                         title = book.title,
                         subject = book.subject,
                         bookType = BookType.fromString(book.bookType),
+                        fileLink = book.fileLink,
                         modifier = Modifier
                             .width(100.dp)
                             .height(140.dp),

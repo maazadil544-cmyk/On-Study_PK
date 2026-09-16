@@ -1,4 +1,4 @@
-name: Build Android Release (AAB)
+name: Build Android APK & Release Bundle
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    name: Generate Android App Bundle (AAB)
+    name: Build APK and AAB
     runs-on: ubuntu-latest
 
     steps:
@@ -40,12 +40,27 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
-    - name: Build App Bundle (AAB)
-      run: ./gradlew bundleRelease --stacktrace
+    - name: Build Android APK and AAB
+      run: ./gradlew assembleRelease assembleDebug bundleRelease --stacktrace
 
-    - name: Upload AAB Artifact
+    - name: Upload Release APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-release-apk
+        path: app/build/outputs/apk/release/*.apk
+        retention-days: 30
+
+    - name: Upload Debug APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-debug-apk
+        path: app/build/outputs/apk/debug/*.apk
+        retention-days: 30
+
+    - name: Upload AAB Bundle
       uses: actions/upload-artifact@v4
       with:
         name: app-release-bundle
         path: app/build/outputs/bundle/release/*.aab
         retention-days: 30
+

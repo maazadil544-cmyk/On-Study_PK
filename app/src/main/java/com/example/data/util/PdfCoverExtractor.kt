@@ -8,11 +8,13 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
+import android.util.Base64
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.TimeUnit
@@ -96,11 +98,11 @@ object PdfCoverExtractor {
         val driveId = extractGoogleDriveFileId(trimmed)
         if (driveId != null) {
             val thumbUrl = getDriveThumbnailUrl(driveId)
-            // Attempt to cache the thumbnail image locally so it is instant and offline-ready
-            val cachedFile = cacheRemoteImage(context, thumbUrl, "cover_drive_${driveId}.jpg")
-            if (cachedFile != null && cachedFile.exists()) {
-                return@withContext cachedFile.absolutePath
-            }
+            // Attempt to cache thumbnail on current device, but ALWAYS return public web URL
+            // so that EVERY user's device and Firebase receives a universal, working image URL.
+            try {
+                cacheRemoteImage(context, thumbUrl, "cover_drive_${driveId}.jpg")
+            } catch (ignored: Exception) {}
             return@withContext thumbUrl
         }
 
@@ -164,9 +166,9 @@ object PdfCoverExtractor {
 
             page = renderer.openPage(0) // First page of the PDF!
 
-            val targetWidth = 540
+            val targetWidth = 360
             val aspect = page.height.toFloat() / page.width.toFloat()
-            val targetHeight = (targetWidth * aspect).toInt().coerceIn(380, 1080)
+            val targetHeight = (targetWidth * aspect).toInt().coerceIn(300, 560)
 
             val bitmap = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bitmap)
@@ -174,16 +176,23 @@ object PdfCoverExtractor {
 
             page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
 
+            // Cache locally on device for quick disk reads
             val coversDir = File(context.filesDir, "covers").apply { if (!exists()) mkdirs() }
             val coverFile = File(coversDir, "cover_${System.currentTimeMillis()}_${(100..999).random()}.jpg")
 
             FileOutputStream(coverFile).use { out ->
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 75, out)
                 out.flush()
             }
+
+            // Also convert to Base64 data URI so it syncs across Firebase to ALL users' phones
+            val baos = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 70, baos)
+            val bytes = baos.toByteArray()
+            val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
             bitmap.recycle()
 
-            coverFile.absolutePath
+            "data:image/jpeg;base64,$b64"
         } catch (e: Exception) {
             Log.e(TAG, "Error rendering PDF first page: ${e.message}", e)
             null
@@ -241,8 +250,8 @@ object PdfCoverExtractor {
         val coversDir = File(context.filesDir, "covers").apply { if (!exists()) mkdirs() }
         val coverFile = File(coversDir, "cover_fallback_${System.currentTimeMillis()}_${(100..999).random()}.jpg")
 
-        val width = 480
-        val height = 680
+        val width = 320
+        val height = 460
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
 
@@ -369,17 +378,23 @@ object PdfCoverExtractor {
         }
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), borderPaint)
 
+        var base64Result = ""
         try {
             FileOutputStream(coverFile).use { out ->
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 88, out)
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 75, out)
                 out.flush()
             }
+            val baos = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 70, baos)
+            val bytes = baos.toByteArray()
+            val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+            base64Result = "data:image/jpeg;base64,$b64"
         } catch (e: Exception) {
             Log.e(TAG, "Failed writing fallback cover: ${e.message}")
         } finally {
             bitmap.recycle()
         }
 
-        return coverFile.absolutePath
+        return if (base64Result.isNotBlank()) base64Result else coverFile.absolutePath
     }
 }

@@ -87,8 +87,10 @@ class StudyRepository(
 
                     val mergedBooks = remoteBooks.map { remote ->
                         val local = existingProgressMap[remote.id]
+                        val cleanCover = ensurePortableCoverImage(remote.coverImage, remote.fileLink)
+                        val withCleanCover = remote.copy(coverImage = cleanCover)
                         if (local != null) {
-                            remote.copy(
+                            withCleanCover.copy(
                                 lastReadPage = if (local.lastReadPage > 0) local.lastReadPage else remote.lastReadPage,
                                 lastReadTimestamp = if (local.lastReadTimestamp > 0) local.lastReadTimestamp else remote.lastReadTimestamp,
                                 isDownloaded = local.isDownloaded,
@@ -96,7 +98,7 @@ class StudyRepository(
                                 isBookmarked = local.isBookmarked
                             )
                         } else {
-                            remote
+                            withCleanCover
                         }
                     }
 
@@ -173,6 +175,30 @@ class StudyRepository(
 
     fun getBookmarkedBooks(): Flow<List<BookEntity>> = dao.getBookmarkedBooks()
 
+    private fun ensurePortableCoverImage(cover: String, fileLink: String): String {
+        val trimmed = cover.trim()
+        if (trimmed.startsWith("/data/")) {
+            val file = File(trimmed)
+            if (file.exists() && file.length() > 50) {
+                return try {
+                    val bytes = file.readBytes()
+                    val b64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+                    "data:image/jpeg;base64,$b64"
+                } catch (e: Exception) {
+                    val driveId = com.example.data.util.PdfCoverExtractor.extractGoogleDriveFileId(fileLink)
+                    if (driveId != null) com.example.data.util.PdfCoverExtractor.getDriveThumbnailUrl(driveId) else ""
+                }
+            } else {
+                val driveId = com.example.data.util.PdfCoverExtractor.extractGoogleDriveFileId(fileLink)
+                return if (driveId != null) com.example.data.util.PdfCoverExtractor.getDriveThumbnailUrl(driveId) else ""
+            }
+        } else if (trimmed.isBlank()) {
+            val driveId = com.example.data.util.PdfCoverExtractor.extractGoogleDriveFileId(fileLink)
+            if (driveId != null) return com.example.data.util.PdfCoverExtractor.getDriveThumbnailUrl(driveId)
+        }
+        return trimmed
+    }
+
     suspend fun addNewBook(book: BookEntity): Long = withContext(Dispatchers.IO) {
         var bookToInsert = book
         if (bookToInsert.coverImage.isBlank() && bookToInsert.fileLink.isNotBlank()) {
@@ -190,6 +216,10 @@ class StudyRepository(
                 e.printStackTrace()
             }
         }
+        // Ensure cover is portable across all user devices before saving & uploading to Firebase
+        val portableCover = ensurePortableCoverImage(bookToInsert.coverImage, bookToInsert.fileLink)
+        bookToInsert = bookToInsert.copy(coverImage = portableCover)
+
         val insertedId = dao.insertBook(bookToInsert)
         val finalBook = bookToInsert.copy(id = insertedId)
         // Upload immediately to Firebase Realtime Database for all devices
@@ -214,6 +244,10 @@ class StudyRepository(
                 e.printStackTrace()
             }
         }
+        // Ensure cover is portable across all user devices before updating & pushing to Firebase
+        val portableCover = ensurePortableCoverImage(bookToUpdate.coverImage, bookToUpdate.fileLink)
+        bookToUpdate = bookToUpdate.copy(coverImage = portableCover)
+
         dao.updateBook(bookToUpdate)
         // Push update to Firebase Realtime Database
         firebaseManager.uploadBook(bookToUpdate)

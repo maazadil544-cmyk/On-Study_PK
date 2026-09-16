@@ -10,6 +10,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,11 +27,14 @@ import androidx.compose.ui.unit.sp
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.example.data.model.BookType
+import com.example.data.util.PdfCoverExtractor
 import com.example.ui.theme.*
+import java.io.File
 
 /**
  * High-craft Book Cover Composable displaying the PDF First Page or styled subject art.
- * Features realistic 3D book spine shadow, rounded corners, and smooth error fallback.
+ * Features realistic 3D book spine shadow, rounded corners, Base64 decoding,
+ * cross-device sync resilience, and smooth error fallback.
  */
 @Composable
 fun BookCoverImage(
@@ -39,6 +43,7 @@ fun BookCoverImage(
     subject: String,
     bookType: BookType,
     modifier: Modifier = Modifier,
+    fileLink: String = "",
     cornerRadius: Dp = 12.dp,
     elevation: Dp = 4.dp,
     showSpineShadow: Boolean = true
@@ -46,7 +51,56 @@ fun BookCoverImage(
     val context = LocalContext.current
     val shape = RoundedCornerShape(cornerRadius)
 
-    val badgeColor = bookType.badgeColor
+    val resolvedModel: Any? = remember(coverImage, fileLink) {
+        val trimmed = coverImage.trim()
+        when {
+            trimmed.startsWith("data:image", ignoreCase = true) -> {
+                val base64Part = trimmed.substringAfter("base64,")
+                try {
+                    android.util.Base64.decode(base64Part, android.util.Base64.DEFAULT)
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            trimmed.startsWith("base64:", ignoreCase = true) -> {
+                val base64Part = trimmed.removePrefix("base64:")
+                try {
+                    android.util.Base64.decode(base64Part, android.util.Base64.DEFAULT)
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            trimmed.startsWith("http://", ignoreCase = true) || trimmed.startsWith("https://", ignoreCase = true) -> {
+                trimmed
+            }
+            trimmed.startsWith("/data/") -> {
+                val localFile = File(trimmed)
+                if (localFile.exists() && localFile.length() > 100) {
+                    localFile
+                } else {
+                    // Local file from another device: recover via Google Drive if available
+                    val driveId = PdfCoverExtractor.extractGoogleDriveFileId(fileLink)
+                    if (driveId != null) {
+                        PdfCoverExtractor.getDriveThumbnailUrl(driveId)
+                    } else {
+                        null
+                    }
+                }
+            }
+            trimmed.isNotBlank() -> {
+                trimmed
+            }
+            else -> {
+                // Empty coverImage: auto-resolve from fileLink if Google Drive
+                val driveId = PdfCoverExtractor.extractGoogleDriveFileId(fileLink)
+                if (driveId != null) {
+                    PdfCoverExtractor.getDriveThumbnailUrl(driveId)
+                } else {
+                    null
+                }
+            }
+        }
+    }
 
     Box(
         modifier = modifier
@@ -55,10 +109,10 @@ fun BookCoverImage(
             .background(Slate100)
             .border(1.dp, Slate200, shape)
     ) {
-        if (coverImage.isNotBlank()) {
+        if (resolvedModel != null) {
             SubcomposeAsyncImage(
                 model = ImageRequest.Builder(context)
-                    .data(coverImage)
+                    .data(resolvedModel)
                     .crossfade(true)
                     .build(),
                 contentDescription = "Cover of $title",
